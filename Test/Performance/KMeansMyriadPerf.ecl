@@ -11,7 +11,7 @@ IMPORT ML_Core;
 IMPORT ML_Core.Types;
 IMPORT PBblas;
 IMPORT $.^ as Test;
-IMPORT Test.^ as KM;
+IMPORT $.^.^ as KM;
 
 //Data Preperation
 //Load Iris Dataset

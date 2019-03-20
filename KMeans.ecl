@@ -27,8 +27,10 @@ IMPORT $.Types.KMeans_Model.Ind1 as KM1;
   *
   * @param max_iter    The maxinum number of iterations to run KMeans. It's an integer scalar
   *                    value. The default value is 100.
-  * @param t           The convergence tolerance. It's a real value scalar.
-                       The default value is 0.00001.
+  * @param t           The convergence tolerance. It's a real value scalar. KMeans will stop
+  *                    iterating when center movement of each cluster is smaller than t between
+  *                    two consecutive iterations.
+  *                    The default value is 0.00001.
   */
 EXPORT KMeans(INTEGER max_iter = 100 , REAL t = 0.00001) := MODULE
   // Dataframe to hold the intermediate/final results of distance calculation
@@ -171,25 +173,25 @@ EXPORT KMeans(INTEGER max_iter = 100 , REAL t = 0.00001) := MODULE
 
   /**
     * Train and return a KMeans model.
-    * <p>Fit function takes the samples d1 and initial centroids d2 and returns a
+    * <p>Fit function takes the samples and initial centroids as inputs and returns a
     * trained KMeans model.
     *
-    * @param d1          The samples to be clustered in DATASET(NumericField) format.
-    *                    Each observation (e.g. record) is identified by 'id', and each
-    *                    feature is identified by field number (i.e. 'number').
-    * @param d2          The initial K centroids for clustering in DATASET(NumericField)
-    *                    format. Each observation (e.g. record) is identified by
-    *                    'id', and each feature is identified by field number.
-    * @return            KMeans Model in the format of ML_Core.Types.Layout_Model2.
-    * @see               ML_Core.Types.Layout_Model2
-    * @see               ML_Core.Types.NumericField
-    * @see               Cluster_Types.KMeans_Model
+    * @param sampleset        The samples to be clustered in DATASET(NumericField) format.
+    *                         Each observation (e.g. record) is identified by 'id', and each
+    *                         feature is identified by field number (i.e. 'number').
+    * @param initCentroids    The initial K centroids for clustering in DATASET(NumericField)
+    *                         format. Each observation (e.g. record) is identified by
+    *                         'id', and each feature is identified by field number.
+    * @return                 KMeans Model in the format of ML_Core.Types.Layout_Model2.
+    * @see                    ML_Core.Types.Layout_Model2
+    * @see                    ML_Core.Types.NumericField
+    * @see                    Types.KMeans_Model
     */
-  EXPORT Fit(DATASET(Types.NumericField) d1, DATASET(Types.NumericField) d2) := FUNCTION
-    //Distribute the samples d1 to each node. Same id of each wi will be on the same node.
-    dp := DISTRIBUTE(d1, HASH32(wi, id));
+  EXPORT Fit(DATASET(Types.NumericField) sampleset, DATASET(Types.NumericField) initCentroids) := FUNCTION
+    //Distribute the samples to each node. Same id of each wi will be on the same node.
+    dp := DISTRIBUTE(sampleset, HASH32(wi, id));
     //Hold the initial centroids in the right dataframe: lIterations.
-    d2itr := PROJECT(d2, TRANSFORM(lIterations,
+    d2itr := PROJECT(initCentroids, TRANSFORM(lIterations,
                                             SELF.values := [LEFT.value],
                                             SELF := LEFT));
     //EM function: LOOP body to iteratively update the coordinates of the centroids
@@ -313,7 +315,7 @@ EXPORT KMeans(INTEGER max_iter = 100 , REAL t = 0.00001) := MODULE
     centroids := PROJECT(result, TRANSFORM(Types.NumericField,
                                             SELF.value := LEFT.values[LEFT.iter + 1],
                                             SELF := LEFT));
-    //labels
+    //labels: the index of the closest center to each sample
     movement := Euclidean(dp, centroids);
     g :=SORT(GROUP(movement,wi_id, x,ALL),wi_id, x, v);
     closest := DEDUP(g, wi_id, x);
@@ -337,7 +339,7 @@ EXPORT KMeans(INTEGER max_iter = 100 , REAL t = 0.00001) := MODULE
       * 3. The iteration runs of each wi.
       *
       * KMeans uses the Layout_Model2 format.
-      * See Cluster_Types.ecl for the format of the model.
+      * See Types.ecl for the format of the model.
       *
       */
     DATASET(Types.Layout_Model2) getModel := FUNCTION
@@ -360,7 +362,7 @@ EXPORT KMeans(INTEGER max_iter = 100 , REAL t = 0.00001) := MODULE
     * Extract the final coordinates of the centers of each cluster from the trained model.
     * @param mod        The fitted/trained KMeans model.
     * @return centers   The Final coordinates of the center of each cluster in NumericField format.
-    * @see ML_Core.Types.NumericField
+    * @see              ML_Core.Types.NumericField
     */
   EXPORT Centers(DATASET(Types.Layout_Model2) mod) := FUNCTION
     index_centers := KM1.centers;
@@ -372,7 +374,7 @@ EXPORT KMeans(INTEGER max_iter = 100 , REAL t = 0.00001) := MODULE
     * @param mod          The fitted/trained KMeans model.
     * @param newSamples   The new samples to be clustered.
     * @return             The index of the closest center for each new sample.
-    * @see                Cluster_Types.KMeans_Model.Labels
+    * @see                Types.KMeans_Model.Labels
     * @see                ML_Core.Types.NumericField
     */
   EXPORT DATASET(KTypes.Labels) Predict(DATASET(Types.Layout_Model2) mod,
@@ -394,7 +396,7 @@ EXPORT KMeans(INTEGER max_iter = 100 , REAL t = 0.00001) := MODULE
     * from the trained Model.
     * @param mod    The fitted/trained KMeans model.
     * @return       The closest center index for each training sample.
-    * @see          Cluster_Types.KMeans_Model.Labels
+    * @see          Types.KMeans_Model.Labels
     */
   EXPORT DATASET(KTypes.Labels) Labels(DATASET(Types.Layout_Model2) mod) := FUNCTION
     l := ModelOps2.Extract(mod, [KM1.samples]);
@@ -409,7 +411,7 @@ EXPORT KMeans(INTEGER max_iter = 100 , REAL t = 0.00001) := MODULE
     * from the provided model.
     * @param mod              The fitted/trained KMeans model.
     * @return iterations      The total number of iterations for each wi.
-    * @see                    Cluster_Types.KMeans_Model.n_Iters
+    * @see                    Types.KMeans_Model.n_Iters
     */
   EXPORT DATASET(KTypes.n_Iters) Iterations(DATASET(Types.Layout_Model2) mod) := FUNCTION
     l := ModelOps2.Extract(mod, [KM1.iterations]);
